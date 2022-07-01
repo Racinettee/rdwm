@@ -1,21 +1,20 @@
-use core::slice;
 use std::collections::LinkedList;
 
 use fontconfig_sys::{FcPatternGetBool, constants::FC_COLOR, FcBool};
 use libc::c_void;
 use x11::{
-    xlib::{Display, Window, Drawable, GC, XCreatePixmap, XDefaultDepth, XCreateGC, XSetLineAttributes, LineSolid, CapButt, JoinMiter, XFree},
-    xft::{XftFont, FcPattern, XftFontOpenName, XftNameParse, XftFontClose, XftFontOpenPattern}, xinerama::{XineramaIsActive, XineramaQueryScreens, XineramaScreenInfo}
+    xlib::{Display, Window, Drawable, GC, XCreatePixmap, XDefaultDepth, XCreateGC, XSetLineAttributes, LineSolid, CapButt, JoinMiter},
+    xft::{XftFont, FcPattern, XftFontOpenName, XftNameParse, XftFontClose, XftFontOpenPattern}
 };
 
-use super::xin;
+use super::{xin, EMPTY_SCREEN_INFO};
 
 pub struct Layout {
     pub symbol:  String,
     pub arrange: fn (&mut Monitor),
 }
 
-pub struct Client {
+pub struct Client<'a> {
     pub name: [i8; 256],
     pub mina: f32, pub maxa: f32,
     pub x: i32, pub y: i32, pub w: i32, pub h: i32,
@@ -28,13 +27,13 @@ pub struct Client {
     pub tags: u32,
     pub isfixed: i32, pub isfloating: i32, pub isurgent: i32,
     pub neverfocus: i32, pub oldstate: i32, pub isfullscreen: i32,
-	pub next: *mut Client,
-	pub snext: *mut Client,
-	pub mon: *mut Monitor,
+	pub next: *mut Self,
+	pub snext: *mut Self,
+	pub mon: &'a Monitor<'a>,
 	pub win: Window,
 }
 
-pub struct Monitor {
+pub struct Monitor<'a> {
 	pub ltsymbol: [u8; 16],
 	pub mfact:    f32,
 	pub nmaster:  i32,
@@ -49,15 +48,16 @@ pub struct Monitor {
 	pub tagset:  [u32; 2],
 	pub showbar: i32,
 	pub topbar:  i32,
-	pub clients: *mut Client,
-	pub sel:     *mut Client,
-	pub stack:   *mut Client,
+	pub clients: LinkedList<Client<'a>>,
+	pub sel:     *mut Client<'a>,
+	pub stack:   *mut Client<'a>,
 	//pub next:    *mut Monitor,
 	pub barwin:  Window,
 	pub lt:      [*const Layout; 2]
 }
 
-static mut mons: LinkedList<Monitor> = LinkedList::new();
+static mut MONS: LinkedList<Monitor> = LinkedList::new();
+static mut SELMON: Option<&Monitor> = None;
 
 pub struct Fnt {
     pub dpy: *mut Display,
@@ -176,13 +176,12 @@ impl<'a> Drw {
 
     pub fn updategeom(&mut self) {
         let mut dirty = 0;
-    
-        unsafe {
-            if XineramaIsActive(self.dpy) != 0 {
-                let screen_info = xin::Screens::get_screen_info(self.dpy);
-                let mut unique = Vec::with_capacity(screen_info.len() as usize);
-                unique.resize(screen_info.len(), XineramaScreenInfo { screen_number: 0, x_org: 0, y_org: 0, width: 0, height: 0 });
-                let n = mons.len();
+        if xin::is_active(self.dpy) {
+            let screen_info = xin::Screens::get_screen_info(self.dpy);
+            let mut unique = Vec::with_capacity(screen_info.len() as usize);
+            unique.resize(screen_info.len(), EMPTY_SCREEN_INFO);
+            unsafe {
+                let n = MONS.len();
                 // only consider unique geometries as seperate screens
                 let mut j = 0;
                 for i in 0..screen_info.len() {
@@ -194,10 +193,10 @@ impl<'a> Drw {
                 drop(screen_info);
                 let nn = j;
                 if n < nn { // new monitors available
-                    for i in 0..(nn - n) {
-                        mons.push_back(Self::createmon());
+                    for _ in 0..(nn - n) {
+                        MONS.push_back(Self::createmon());
                     }
-                    for (i, m) in mons.iter_mut().enumerate() {
+                    for (i, m) in MONS.iter_mut().enumerate() {
                         if i >= n
                         || unique[i].x_org as i32 != m.mx || unique[i].y_org as i32 != m.my
                         || unique[i].width as i32 != m.mw || unique[i].height as i32 != m.mh {
@@ -214,17 +213,39 @@ impl<'a> Drw {
                             Self::updatebarpos(m);
                         }
                     }
+                } else { // less monitors available
+                    for _ in nn..n {
+                        let last_monitor = MONS.back_mut().unwrap();
+                        for c in &mut last_monitor.clients {
+                            dirty = 1;
+                            Self::detach_stack(c);
+                            c.mon = MONS.front().unwrap();
+                            Self::attach(c);
+                            Self::attachstack(c);
+                        }
+                        //if last_monitor == self.f
+                    }
                 }
             }
         }
     }
 
-    fn is_unique_geom(unique: &XineramaScreenInfo, n: usize, info: &XineramaScreenInfo) -> bool {
+    fn is_unique_geom(_unique: &xin::ScreenInfo, _n: usize, _info: &xin::ScreenInfo) -> bool {
         todo!()
     }
-    fn createmon() -> Monitor {
+    fn createmon() -> Monitor<'a> {
         todo!()
     }
-    fn updatebarpos(m: &mut Monitor) {
+    fn updatebarpos(_m: &mut Monitor) {
+        todo!()
+    }
+    fn detach_stack(_c: &Client) {
+        todo!()
+    }
+    fn attach(_c: &Client) {
+        todo!()
+    }
+    fn attachstack(_c: &Client) {
+        todo!()
     }
 }
