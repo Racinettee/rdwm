@@ -1,0 +1,12 @@
+[package]
+name = "rdwm"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+#gdk4-x11 = "0.4.8"
+x11 = { version = "2.19.1", features = ["xlib", "xft", "xinerama"] }
+libc = "0.2.126"
+yeslogic-fontconfig-sys = "3.2.0"
