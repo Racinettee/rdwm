@@ -56,8 +56,10 @@ pub struct Monitor<'a> {
 	pub lt:      [*const Layout; 2]
 }
 
-static mut MONS: LinkedList<Monitor> = LinkedList::new();
-static mut SELMON: Option<&Monitor> = None;
+pub static mut MONS: LinkedList<Monitor> = LinkedList::new();
+pub static mut SELMON: i32 = 0;
+pub static mut SW: i32 = 0;
+pub static mut SH: i32 = 0;
 
 pub struct Fnt {
     pub dpy: *mut Display,
@@ -174,8 +176,8 @@ impl<'a> Drw {
         }))
     }
 
-    pub fn updategeom(&mut self) {
-        let mut dirty = 0;
+    pub fn updategeom(&mut self) -> bool {
+        let mut dirty = false;
         if xin::is_active(self.dpy) {
             let screen_info = xin::Screens::get_screen_info(self.dpy);
             let mut unique = Vec::with_capacity(screen_info.len() as usize);
@@ -200,7 +202,7 @@ impl<'a> Drw {
                         if i >= n
                         || unique[i].x_org as i32 != m.mx || unique[i].y_org as i32 != m.my
                         || unique[i].width as i32 != m.mw || unique[i].height as i32 != m.mh {
-                            dirty = 1;
+                            dirty = true;
                             m.num = i as i32;
                             m.mx = unique[i].x_org as i32;
                             m.wx = unique[i].x_org as i32;
@@ -217,17 +219,32 @@ impl<'a> Drw {
                     for _ in nn..n {
                         let last_monitor = MONS.back_mut().unwrap();
                         for c in &mut last_monitor.clients {
-                            dirty = 1;
+                            dirty = true;
                             Self::detach_stack(c);
                             c.mon = MONS.front().unwrap();
                             Self::attach(c);
                             Self::attachstack(c);
                         }
-                        //if last_monitor == self.f
+                        if last_monitor.num == SELMON {
+                            SELMON = MONS.front().unwrap().num;
+                        }
+                        Self::cleanup_mon(last_monitor);
                     }
+                }
+                drop(unique);
+            }
+        } else {
+            unsafe {
+                if MONS.is_empty() {
+                    MONS.push_back(Self::createmon());
+                }
+                let first_mon = MONS.front_mut().unwrap();
+                if first_mon.mw != SW || first_mon.mh != SH {
+                    
                 }
             }
         }
+        dirty
     }
 
     fn is_unique_geom(_unique: &xin::ScreenInfo, _n: usize, _info: &xin::ScreenInfo) -> bool {
@@ -246,6 +263,9 @@ impl<'a> Drw {
         todo!()
     }
     fn attachstack(_c: &Client) {
+        todo!()
+    }
+    fn cleanup_mon(_m: &Monitor) {
         todo!()
     }
 }
