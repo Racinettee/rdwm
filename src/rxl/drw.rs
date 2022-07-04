@@ -1,4 +1,4 @@
-use std::collections::LinkedList;
+use std::{collections::LinkedList, sync::Mutex};
 
 use fontconfig_sys::{FcPatternGetBool, constants::FC_COLOR, FcBool};
 use libc::c_void;
@@ -7,7 +7,7 @@ use x11::{
     xft::{XftFont, FcPattern, XftFontOpenName, XftNameParse, XftFontClose, XftFontOpenPattern}
 };
 
-use super::{xin, EMPTY_SCREEN_INFO};
+use super::{xin, EMPTY_SCREEN_INFO, ScreenInfoExt};
 
 pub struct Layout {
     pub symbol:  String,
@@ -29,7 +29,7 @@ pub struct Client<'a> {
     pub neverfocus: i32, pub oldstate: i32, pub isfullscreen: i32,
 	pub next: *mut Self,
 	pub snext: *mut Self,
-	pub mon: &'a Monitor<'a>,
+	pub mon: i32,
 	pub win: Window,
 }
 
@@ -56,7 +56,6 @@ pub struct Monitor<'a> {
 	pub lt:      [*const Layout; 2]
 }
 
-pub static mut MONS: LinkedList<Monitor> = LinkedList::new();
 pub static mut SELMON: i32 = 0;
 pub static mut SW: i32 = 0;
 pub static mut SH: i32 = 0;
@@ -80,7 +79,7 @@ impl Default for Fnt {
     }
 }
 
-pub struct Drw {
+pub struct Drw<'a> {
     pub dpy: *mut Display,
     pub w: u32, pub h: u32,
     pub screen: i32,
@@ -89,10 +88,12 @@ pub struct Drw {
     pub gc: GC,
     //pub scheme: *mut Clr,
     pub fonts: Box<Fnt>,
+
+    pub mons: &'a mut LinkedList<Monitor<'a>>,
 }
 
-impl<'a> Drw {
-    pub fn create(display: *mut Display, screen: i32, root: Window, w: u32, h: u32) -> Self {
+impl<'a> Drw<'a> {
+    pub fn create(display: *mut Display, mons: &'a mut LinkedList<Monitor<'a>>, screen: i32, root: Window, w: u32, h: u32) -> Self {
         let result = Drw {
             dpy: display,
             w: w,
@@ -102,6 +103,8 @@ impl<'a> Drw {
             drawable: unsafe { XCreatePixmap(display, root, w, h, XDefaultDepth(display, screen) as u32) },
             gc: unsafe { XCreateGC(display, root, 0, std::ptr::null_mut()) },
             fonts: Default::default(),
+
+            mons: mons,
         };
         //scheme: todo!(),
         //fonts: Default::default(),
@@ -182,12 +185,12 @@ impl<'a> Drw {
             let screen_info = xin::Screens::get_screen_info(self.dpy);
             let mut unique = Vec::with_capacity(screen_info.len() as usize);
             unique.resize(screen_info.len(), EMPTY_SCREEN_INFO);
+            let n = self.mons.len();
+            let mut j = 0;
             unsafe {
-                let n = MONS.len();
                 // only consider unique geometries as seperate screens
-                let mut j = 0;
                 for i in 0..screen_info.len() {
-                    if Self::is_unique_geom(&unique[0], j, &screen_info[i as usize]) {
+                    if Self::is_unique_geom(&unique[0..j], screen_info[i as usize]) {
                         unique[j] = screen_info[i as usize];
                         j += 1;
                     }
@@ -196,9 +199,9 @@ impl<'a> Drw {
                 let nn = j;
                 if n < nn { // new monitors available
                     for _ in 0..(nn - n) {
-                        MONS.push_back(Self::createmon());
+                        self.mons.push_back(Self::createmon());
                     }
-                    for (i, m) in MONS.iter_mut().enumerate() {
+                    for (i, m) in self.mons.iter_mut().enumerate() {
                         if i >= n
                         || unique[i].x_org as i32 != m.mx || unique[i].y_org as i32 != m.my
                         || unique[i].width as i32 != m.mw || unique[i].height as i32 != m.mh {
@@ -217,16 +220,16 @@ impl<'a> Drw {
                     }
                 } else { // less monitors available
                     for _ in nn..n {
-                        let last_monitor = MONS.back_mut().unwrap();
+                        let last_monitor = self.mons.back_mut().unwrap();
                         for c in &mut last_monitor.clients {
                             dirty = true;
                             Self::detach_stack(c);
-                            c.mon = MONS.front().unwrap();
+                            c.mon = self.mons.front().unwrap().num;
                             Self::attach(c);
                             Self::attachstack(c);
                         }
                         if last_monitor.num == SELMON {
-                            SELMON = MONS.front().unwrap().num;
+                            SELMON = self.mons.front().unwrap().num;
                         }
                         Self::cleanup_mon(last_monitor);
                     }
@@ -234,21 +237,37 @@ impl<'a> Drw {
                 drop(unique);
             }
         } else {
+            if self.mons.is_empty() {
+                self.mons.push_back(Self::createmon());
+            }
+            let first_mon = self.mons.front_mut().unwrap();
+            if unsafe { first_mon.mw != SW || first_mon.mh != SH } {
+                dirty = true;
+                unsafe {
+                    first_mon.mw = SW;
+                    first_mon.ww = SW;
+                    first_mon.mh = SH;
+                    first_mon.wh = SH;
+                }
+                Self::updatebarpos(first_mon);
+            }
+        }
+        if dirty {
             unsafe {
-                if MONS.is_empty() {
-                    MONS.push_back(Self::createmon());
-                }
-                let first_mon = MONS.front_mut().unwrap();
-                if first_mon.mw != SW || first_mon.mh != SH {
-                    
-                }
+                SELMON = self.mons.front().unwrap().num;
+                SELMON = Self::wintomon(self.root).num;
             }
         }
         dirty
     }
 
-    fn is_unique_geom(_unique: &xin::ScreenInfo, _n: usize, _info: &xin::ScreenInfo) -> bool {
-        todo!()
+    fn is_unique_geom(unique: &[xin::ScreenInfo], info: xin::ScreenInfo) -> bool {
+        for screen in unique.iter().rev() {
+            if screen.compare_geom(info) {
+                return false
+            }
+        }
+        true
     }
     fn createmon() -> Monitor<'a> {
         todo!()
@@ -266,6 +285,9 @@ impl<'a> Drw {
         todo!()
     }
     fn cleanup_mon(_m: &Monitor) {
+        todo!()
+    }
+    fn wintomon(w: Window) -> &'a Monitor<'a> {
         todo!()
     }
 }

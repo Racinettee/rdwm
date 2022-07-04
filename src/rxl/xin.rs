@@ -5,6 +5,18 @@ use x11::{xinerama::{XineramaScreenInfo, XineramaQueryScreens, XineramaIsActive}
 
 pub type ScreenInfo = XineramaScreenInfo;
 
+pub trait ScreenInfoExt {
+    // returns true if same
+    fn compare_geom(&self, other: Self) -> bool;
+}
+
+impl ScreenInfoExt for ScreenInfo {
+    fn compare_geom(&self, other: Self) -> bool {
+        self.x_org == other.x_org && self.y_org == other.y_org
+            && self.width == other.width && self.height == other.height
+    }
+}
+
 pub struct Screens<'a> {
     pub info: &'a mut [ScreenInfo]
 }
