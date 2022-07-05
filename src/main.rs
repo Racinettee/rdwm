@@ -1,4 +1,7 @@
-use x11::{xlib::{Display, XCloseDisplay, XErrorEvent, XOpenDisplay, XDefaultRootWindow, XSync, SubstructureRedirectMask, BadWindow, BadMatch, BadDrawable, BadAccess, XDefaultScreen, XDisplayWidth, XDisplayHeight, XRootWindow}, xinerama::XineramaIsActive};
+use std::collections::LinkedList;
+
+use rxl::Monitor;
+use x11::{xlib::{Display, XCloseDisplay, XErrorEvent, XOpenDisplay, XDefaultRootWindow, XSync, SubstructureRedirectMask, BadWindow, BadMatch, BadDrawable, BadAccess, XDefaultScreen, XDisplayWidth, XDisplayHeight, XRootWindow}};
 use libc::{signal, 
     //setsid, fork, close,
     waitpid, SIGCHLD, SIG_ERR, WNOHANG};
@@ -26,7 +29,7 @@ fn check_other_wm(display: *mut Display) -> Result<(), &'static str> {
     Ok(())
 }
 
-fn setup(display: *mut Display) -> Result<(), &'static str> {
+fn setup<'a>(display: *mut Display, mons: &'a mut LinkedList<Monitor<'a>>) -> Result<(), &'static str> {
     // clean up any zombie processes
     sigchld(0);
 
@@ -35,7 +38,7 @@ fn setup(display: *mut Display) -> Result<(), &'static str> {
         let sw = XDisplayWidth(display, screen);
         let sh = XDisplayHeight(display, screen);
         let root = XRootWindow(display, screen);
-        let mut drw = rxl::Drw::create(display, screen, root, sw as u32,sh as u32);
+        let mut drw = rxl::Drw::create(display, mons, screen, root, sw as u32,sh as u32);
         if let None = drw.fontset_create(FONTS) {
             return Err("no founts could be loaded")
         }
@@ -66,6 +69,7 @@ fn cleanup() -> Result<(), &'static str> {
 //static mut RESULT_SENDER: Option<Mutex<Sender<()>>> = None;
 
 fn main() -> Result<(), &'static str> {
+    let mut monitors = LinkedList::new();
     let display = connect_display()?;
     // check command args
 
@@ -74,7 +78,7 @@ fn main() -> Result<(), &'static str> {
     // check other wm
     check_other_wm(display)?;
     // setup
-    setup(display)?;
+    setup(display, &mut monitors)?;
     // scan
     scan()?;
     // run

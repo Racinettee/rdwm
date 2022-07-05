@@ -1,7 +1,6 @@
 use std::{slice::{self, SliceIndex}, ops::Index};
-
 use libc::c_void;
-use x11::{xinerama::{XineramaScreenInfo, XineramaQueryScreens, XineramaIsActive}, xlib::{Display, XFree, Screen}};
+use x11::{xinerama::{XineramaScreenInfo, XineramaQueryScreens, XineramaIsActive}, xlib::{Display, XFree}};
 
 pub type ScreenInfo = XineramaScreenInfo;
 

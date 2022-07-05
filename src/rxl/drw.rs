@@ -1,4 +1,4 @@
-use std::{collections::LinkedList, sync::Mutex};
+use std::{collections::LinkedList};
 
 use fontconfig_sys::{FcPatternGetBool, constants::FC_COLOR, FcBool};
 use libc::c_void;
@@ -220,16 +220,17 @@ impl<'a> Drw<'a> {
                     }
                 } else { // less monitors available
                     for _ in nn..n {
+                        let first_mon_num = self.mons.front().unwrap().num;
                         let last_monitor = self.mons.back_mut().unwrap();
                         for c in &mut last_monitor.clients {
                             dirty = true;
                             Self::detach_stack(c);
-                            c.mon = self.mons.front().unwrap().num;
+                            c.mon = first_mon_num;
                             Self::attach(c);
                             Self::attachstack(c);
                         }
                         if last_monitor.num == SELMON {
-                            SELMON = self.mons.front().unwrap().num;
+                            SELMON = first_mon_num;
                         }
                         Self::cleanup_mon(last_monitor);
                     }
@@ -287,7 +288,7 @@ impl<'a> Drw<'a> {
     fn cleanup_mon(_m: &Monitor) {
         todo!()
     }
-    fn wintomon(w: Window) -> &'a Monitor<'a> {
+    fn wintomon(_w: Window) -> &'a Monitor<'a> {
         todo!()
     }
 }
