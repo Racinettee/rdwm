@@ -7,7 +7,7 @@ use x11::{
     xft::{XftFont, FcPattern, XftFontOpenName, XftNameParse, XftFontClose, XftFontOpenPattern}
 };
 
-use super::{xin, ScreenInfoExt};
+use super::{xin, ScreenInfoExt, Settings};
 
 pub struct Layout {
     pub symbol:  String,
@@ -89,22 +89,19 @@ pub struct Drw<'a> {
     //pub scheme: *mut Clr,
     pub fonts: Box<Fnt>,
 
-    pub mons: &'a mut LinkedList<Monitor<'a>>,
+    pub settings: &'a mut Settings<'a>,
 }
 
 impl<'a> Drw<'a> {
-    pub fn create(display: *mut Display, mons: &'a mut LinkedList<Monitor<'a>>, screen: i32, root: Window, w: u32, h: u32) -> Self {
+    pub fn create(display: *mut Display, settings: &'a mut Settings<'a>, screen: i32, root: Window, w: u32, h: u32) -> Self {
         let result = Drw {
             dpy: display,
-            w: w,
-            h: h,
-            root: root,
-            screen: screen,
+            w, h, root, screen,
             drawable: unsafe { XCreatePixmap(display, root, w, h, XDefaultDepth(display, screen) as u32) },
             gc: unsafe { XCreateGC(display, root, 0, std::ptr::null_mut()) },
             fonts: Default::default(),
 
-            mons: mons,
+            settings,
         };
         //scheme: todo!(),
         //fonts: Default::default(),
@@ -183,15 +180,15 @@ impl<'a> Drw<'a> {
         let mut dirty = false;
         let mut unique = Vec::new();
         if xin::is_active(self.dpy) {
-            let n = self.mons.len();
+            let n = self.settings.mons.len();
             xin::Screens::get_screen_info(self.dpy).iter()
             .for_each(|si| if si.is_unique_geom(&unique) { unique.push(*si) });
             // If there are more screens in unique than were in monitor we will create some new monitors
             if unique.len() > n {
                 for _ in 0..(unique.len() - n) {
-                    self.mons.push_back(Self::createmon());
+                    self.settings.mons.push_back(Self::createmon());
                 }
-                for (i, m) in self.mons.iter_mut().enumerate() {
+                for (i, m) in self.settings.mons.iter_mut().enumerate() {
                     if i >= n
                     || unique[i].x_org as i32 != m.mx || unique[i].y_org as i32 != m.my
                     || unique[i].width as i32 != m.mw || unique[i].height as i32 != m.mh {
@@ -210,8 +207,8 @@ impl<'a> Drw<'a> {
                 }
             } else { // less monitors available
                 for _ in 0..(unique.len() - n) {
-                    let first_mon_num = self.mons.front().unwrap().num;
-                    let last_monitor = self.mons.back_mut().unwrap();
+                    let first_mon_num = self.settings.mons.front().unwrap().num;
+                    let last_monitor = self.settings.mons.back_mut().unwrap();
                     for c in &mut last_monitor.clients {
                         dirty = true;
                         Self::detach_stack(c);
@@ -229,10 +226,10 @@ impl<'a> Drw<'a> {
             }
             drop(unique);
         } else {
-            if self.mons.is_empty() {
-                self.mons.push_back(Self::createmon());
+            if self.settings.mons.is_empty() {
+                self.settings.mons.push_back(Self::createmon());
             }
-            let first_mon = self.mons.front_mut().unwrap();
+            let first_mon = self.settings.mons.front_mut().unwrap();
             if unsafe { first_mon.mw != SW || first_mon.mh != SH } {
                 dirty = true;
                 unsafe {
@@ -246,7 +243,7 @@ impl<'a> Drw<'a> {
         }
         if dirty {
             unsafe {
-                SELMON = self.mons.front().unwrap().num;
+                SELMON = self.settings.mons.front().unwrap().num;
                 SELMON = Self::wintomon(self.root).num;
             }
         }
@@ -254,6 +251,7 @@ impl<'a> Drw<'a> {
     }
 
     fn createmon() -> Monitor<'a> {
+        let mut m: Monitor;
         todo!()
     }
     fn updatebarpos(_m: &mut Monitor) {
