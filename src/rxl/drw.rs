@@ -1,4 +1,4 @@
-use std::{collections::LinkedList};
+use std::{collections::{LinkedList}};
 
 use fontconfig_sys::{FcPatternGetBool, constants::FC_COLOR, FcBool};
 use libc::c_void;
@@ -7,7 +7,7 @@ use x11::{
     xft::{XftFont, FcPattern, XftFontOpenName, XftNameParse, XftFontClose, XftFontOpenPattern}
 };
 
-use super::{xin, EMPTY_SCREEN_INFO, ScreenInfoExt};
+use super::{xin, ScreenInfoExt};
 
 pub struct Layout {
     pub symbol:  String,
@@ -181,62 +181,53 @@ impl<'a> Drw<'a> {
 
     pub fn updategeom(&mut self) -> bool {
         let mut dirty = false;
+        let mut unique = Vec::new();
         if xin::is_active(self.dpy) {
-            let screen_info = xin::Screens::get_screen_info(self.dpy);
-            let mut unique = Vec::with_capacity(screen_info.len() as usize);
-            unique.resize(screen_info.len(), EMPTY_SCREEN_INFO);
             let n = self.mons.len();
-            let mut j = 0;
-            unsafe {
-                // only consider unique geometries as seperate screens
-                for i in 0..screen_info.len() {
-                    if Self::is_unique_geom(&unique[0..j], screen_info[i as usize]) {
-                        unique[j] = screen_info[i as usize];
-                        j += 1;
+            xin::Screens::get_screen_info(self.dpy).iter()
+            .for_each(|si| if si.is_unique_geom(&unique) { unique.push(*si) });
+            // If there are more screens in unique than were in monitor we will create some new monitors
+            if unique.len() > n {
+                for _ in 0..(unique.len() - n) {
+                    self.mons.push_back(Self::createmon());
+                }
+                for (i, m) in self.mons.iter_mut().enumerate() {
+                    if i >= n
+                    || unique[i].x_org as i32 != m.mx || unique[i].y_org as i32 != m.my
+                    || unique[i].width as i32 != m.mw || unique[i].height as i32 != m.mh {
+                        dirty = true;
+                        m.num = i as i32;
+                        m.mx = unique[i].x_org as i32;
+                        m.wx = unique[i].x_org as i32;
+                        m.my = unique[i].y_org as i32;
+                        m.wy = unique[i].y_org as i32;
+                        m.mw = unique[i].width as i32;
+                        m.mh = unique[i].height as i32;
+                        m.ww = unique[i].width as i32;
+                        m.wh = unique[i].height as i32;
+                        Self::updatebarpos(m);
                     }
                 }
-                drop(screen_info);
-                let nn = j;
-                if n < nn { // new monitors available
-                    for _ in 0..(nn - n) {
-                        self.mons.push_back(Self::createmon());
+            } else { // less monitors available
+                for _ in 0..(unique.len() - n) {
+                    let first_mon_num = self.mons.front().unwrap().num;
+                    let last_monitor = self.mons.back_mut().unwrap();
+                    for c in &mut last_monitor.clients {
+                        dirty = true;
+                        Self::detach_stack(c);
+                        c.mon = first_mon_num;
+                        Self::attach(c);
+                        Self::attachstack(c);
                     }
-                    for (i, m) in self.mons.iter_mut().enumerate() {
-                        if i >= n
-                        || unique[i].x_org as i32 != m.mx || unique[i].y_org as i32 != m.my
-                        || unique[i].width as i32 != m.mw || unique[i].height as i32 != m.mh {
-                            dirty = true;
-                            m.num = i as i32;
-                            m.mx = unique[i].x_org as i32;
-                            m.wx = unique[i].x_org as i32;
-                            m.my = unique[i].y_org as i32;
-                            m.wy = unique[i].y_org as i32;
-                            m.mw = unique[i].width as i32;
-                            m.mh = unique[i].height as i32;
-                            m.ww = unique[i].width as i32;
-                            m.wh = unique[i].height as i32;
-                            Self::updatebarpos(m);
-                        }
-                    }
-                } else { // less monitors available
-                    for _ in nn..n {
-                        let first_mon_num = self.mons.front().unwrap().num;
-                        let last_monitor = self.mons.back_mut().unwrap();
-                        for c in &mut last_monitor.clients {
-                            dirty = true;
-                            Self::detach_stack(c);
-                            c.mon = first_mon_num;
-                            Self::attach(c);
-                            Self::attachstack(c);
-                        }
+                    unsafe {
                         if last_monitor.num == SELMON {
                             SELMON = first_mon_num;
                         }
-                        Self::cleanup_mon(last_monitor);
                     }
+                    Self::cleanup_mon(last_monitor);
                 }
-                drop(unique);
             }
+            drop(unique);
         } else {
             if self.mons.is_empty() {
                 self.mons.push_back(Self::createmon());
@@ -262,14 +253,6 @@ impl<'a> Drw<'a> {
         dirty
     }
 
-    fn is_unique_geom(unique: &[xin::ScreenInfo], info: xin::ScreenInfo) -> bool {
-        for screen in unique.iter().rev() {
-            if screen.compare_geom(info) {
-                return false
-            }
-        }
-        true
-    }
     fn createmon() -> Monitor<'a> {
         todo!()
     }

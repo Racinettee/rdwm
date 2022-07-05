@@ -4,15 +4,20 @@ use x11::{xinerama::{XineramaScreenInfo, XineramaQueryScreens, XineramaIsActive}
 
 pub type ScreenInfo = XineramaScreenInfo;
 
-pub trait ScreenInfoExt {
+pub trait ScreenInfoExt
+where Self: Copy, Self: Sized {
     // returns true if same
     fn compare_geom(&self, other: Self) -> bool;
+    fn is_unique_geom(&self, others: &[Self]) -> bool;
 }
 
 impl ScreenInfoExt for ScreenInfo {
     fn compare_geom(&self, other: Self) -> bool {
         self.x_org == other.x_org && self.y_org == other.y_org
             && self.width == other.width && self.height == other.height
+    }
+    fn is_unique_geom(&self, others: &[Self]) -> bool {
+        others.iter().all(|i| !i.compare_geom(*self))
     }
 }
 
@@ -32,6 +37,9 @@ impl<'a> Screens<'a> {
     pub fn len(&self) -> usize {
         self.info.len()
     }
+    pub fn iter(&self) -> std::slice::Iter<'_, ScreenInfo> {
+        self.info.iter()
+    }
 }
 
 impl<'a, Idx> Index<Idx> for Screens<'a>
@@ -50,8 +58,6 @@ impl Drop for Screens<'_> {
         }
     }
 }
-
-pub const EMPTY_SCREEN_INFO: XineramaScreenInfo = XineramaScreenInfo { screen_number: 0, x_org: 0, y_org: 0, width: 0, height: 0 };
 
 pub fn is_active(dpy: *mut Display) -> bool {
     unsafe { XineramaIsActive(dpy) != 0 }
