@@ -1,15 +1,17 @@
 mod drw;
 mod xin;
-use std::collections::LinkedList;
+
+pub mod xconst;
 
 pub use drw::*;
 pub use xin::*;
 
+use std::collections::LinkedList;
 // Runtime settings for holding the global variables
 // we'd see in dwm.c
 pub struct Settings<'a> {
     // X display screen geometry width, height
-    sw: i32, sh: i32,
+    pub sw: i32, pub sh: i32,
 
-    mons: LinkedList<Monitor<'a>>,
+    pub mons: LinkedList<Monitor<'a>>,
 }

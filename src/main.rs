@@ -1,6 +1,6 @@
 use std::collections::LinkedList;
 
-use rxl::{Monitor, Settings};
+use rxl::{xconst, Monitor, Settings};
 use x11::{xlib::{Display, XCloseDisplay, XErrorEvent, XOpenDisplay, XDefaultRootWindow, XSync, SubstructureRedirectMask, BadWindow, BadMatch, BadDrawable, BadAccess, XDefaultScreen, XDisplayWidth, XDisplayHeight, XRootWindow}};
 use libc::{signal, 
     //setsid, fork, close,
@@ -110,26 +110,17 @@ extern "C" fn xerrorstart(_display: *mut Display, _ee: *mut XErrorEvent) -> i32 
     std::process::exit(-1);
 }
 
-const X_SETINPUTFOCUS: u8 = 42;
-const X_POLYTEXT8: u8 = 74;
-const X_POLYFILLRECTANGLE: u8 = 70;
-const X_POLYSEGMENT: u8 = 66;
-const X_CONFIGUREWINDOW: u8 = 12;
-const X_GRABBUTTON: u8 = 28;
-const X_GRABKEY: u8 = 33;
-const X_COPYAREA: u8 = 62;
-
 unsafe extern "C" fn xerror(display: *mut Display, ee: *mut XErrorEvent) -> i32 {
     #[allow(non_upper_case_globals)]
     match ((*ee).request_code, (*ee).error_code) {
-        (X_SETINPUTFOCUS,   BadMatch) |
-        (X_POLYTEXT8,       BadDrawable) |
-        (X_POLYFILLRECTANGLE, BadDrawable) |
-        (X_POLYSEGMENT,     BadDrawable) |
-        (X_CONFIGUREWINDOW, BadMatch) |
-        (X_GRABBUTTON,      BadAccess) |
-        (X_GRABKEY,         BadAccess) |
-        (X_COPYAREA,        BadDrawable) |
+        (xconst::X_SETINPUTFOCUS,   BadMatch) |
+        (xconst::X_POLYTEXT8,       BadDrawable) |
+        (xconst::X_POLYFILLRECTANGLE, BadDrawable) |
+        (xconst::X_POLYSEGMENT,     BadDrawable) |
+        (xconst::X_CONFIGUREWINDOW, BadMatch) |
+        (xconst::X_GRABBUTTON,      BadAccess) |
+        (xconst::X_GRABKEY,         BadAccess) |
+        (xconst::X_COPYAREA,        BadDrawable) |
         (_, BadWindow) => return 0,
         (_, _) => ()
     }
