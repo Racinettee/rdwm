@@ -71,6 +71,7 @@ fn cleanup() -> Result<(), &'static str> {
 fn main() -> Result<(), &'static str> {
     let mut settings = Settings {
         sw: 0, sh: 0,
+        bh: 0,
         mons: LinkedList::new()
     };
     let display = connect_display()?;

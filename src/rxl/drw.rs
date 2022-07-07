@@ -1,5 +1,3 @@
-use std::{collections::{LinkedList}};
-
 use fontconfig_sys::{FcPatternGetBool, constants::FC_COLOR, FcBool};
 use libc::c_void;
 use x11::{
@@ -7,11 +5,12 @@ use x11::{
     xft::{XftFont, FcPattern, XftFontOpenName, XftNameParse, XftFontClose, XftFontOpenPattern}
 };
 
-use super::{xin, ScreenInfoExt, Settings};
+use super::{xin, ScreenInfoExt, Settings, Monitor};
 
+#[derive(Copy, Clone)]
 pub struct Layout {
-    pub symbol:  String,
-    pub arrange: fn (&mut Monitor),
+    pub symbol:  &'static str,
+    pub arrange: Option<fn (&mut Monitor)>,
 }
 
 pub struct Client<'a> {
@@ -31,29 +30,6 @@ pub struct Client<'a> {
 	pub snext: *mut Self,
 	pub mon: i32,
 	pub win: Window,
-}
-
-pub struct Monitor<'a> {
-	pub ltsymbol: [u8; 16],
-	pub mfact:    f32,
-	pub nmaster:  i32,
-	pub num:      i32,
-	pub by:       i32,               /* bar geometry */
-	pub mx: i32, pub my: i32,
-    pub mw: i32, pub mh: i32,   /* screen size */
-	pub wx: i32, pub wy: i32,
-    pub ww: i32, pub wh: i32,   /* window area  */
-	pub seltags: u32,
-	pub sellt:   u32,
-	pub tagset:  [u32; 2],
-	pub showbar: i32,
-	pub topbar:  i32,
-	pub clients: LinkedList<Client<'a>>,
-	pub sel:     *mut Client<'a>,
-	pub stack:   *mut Client<'a>,
-	//pub next:    *mut Monitor,
-	pub barwin:  Window,
-	pub lt:      [*const Layout; 2]
 }
 
 pub static mut SELMON: i32 = 0;
@@ -186,7 +162,7 @@ impl<'a> Drw<'a> {
             // If there are more screens in unique than were in monitor we will create some new monitors
             if unique.len() > n {
                 for _ in 0..(unique.len() - n) {
-                    self.settings.mons.push_back(Self::createmon());
+                    self.settings.mons.push_back(Monitor::create());
                 }
                 for (i, m) in self.settings.mons.iter_mut().enumerate() {
                     if i >= n
@@ -202,7 +178,7 @@ impl<'a> Drw<'a> {
                         m.mh = unique[i].height as i32;
                         m.ww = unique[i].width as i32;
                         m.wh = unique[i].height as i32;
-                        Self::updatebarpos(m);
+                        m.updatebarpos(self.settings.bh);
                     }
                 }
             } else { // less monitors available
@@ -227,7 +203,7 @@ impl<'a> Drw<'a> {
             drop(unique);
         } else {
             if self.settings.mons.is_empty() {
-                self.settings.mons.push_back(Self::createmon());
+                self.settings.mons.push_back(Monitor::create());
             }
             let first_mon = self.settings.mons.front_mut().unwrap();
             if unsafe { first_mon.mw != SW || first_mon.mh != SH } {
@@ -238,7 +214,7 @@ impl<'a> Drw<'a> {
                     first_mon.mh = SH;
                     first_mon.wh = SH;
                 }
-                Self::updatebarpos(first_mon);
+                first_mon.updatebarpos(self.settings.bh);
             }
         }
         if dirty {
@@ -248,14 +224,6 @@ impl<'a> Drw<'a> {
             }
         }
         dirty
-    }
-
-    fn createmon() -> Monitor<'a> {
-        let mut m: Monitor;
-        todo!()
-    }
-    fn updatebarpos(_m: &mut Monitor) {
-        todo!()
     }
     fn detach_stack(_c: &Client) {
         todo!()
@@ -272,4 +240,12 @@ impl<'a> Drw<'a> {
     fn wintomon(_w: Window) -> &'a Monitor<'a> {
         todo!()
     }
+}
+
+pub fn tile(_m: &mut Monitor) {
+    todo!()
+}
+
+pub fn monocle(_m: &mut Monitor) {
+    todo!()
 }
