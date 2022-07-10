@@ -1,10 +1,10 @@
-use std::{collections::LinkedList};
+use std::{collections::LinkedList, cmp::{max, min}};
 
 use x11::xlib::Window;
 
-use super::{Client, Layout, Settings};
+use super::{Client, Layout};
 
-pub struct Monitor<'a> {
+pub struct Monitor {
 	pub ltsymbol: &'static str,
 	pub mfact:    f32,
 	pub nmaster:  i32,
@@ -19,16 +19,16 @@ pub struct Monitor<'a> {
 	pub tagset:  [u32; 2],
 	pub showbar: bool,
 	pub topbar:  bool,
-	pub clients: LinkedList<Client<'a>>,
-	pub sel:     *mut Client<'a>,
-	pub stack:   *mut Client<'a>,
+	pub clients: LinkedList<Client>,
+	pub sel:     *mut Client,
+	pub stack:   *mut Client,
 	//pub next:    *mut Monitor,
 	pub barwin:  Window,
 	pub lt:      [Layout; 2]
 }
 
-impl<'a> Monitor<'a> {
-    pub fn create() -> Monitor<'a> {
+impl<'a> Monitor {
+    pub fn create() -> Monitor {
 		Self::default()
     }
 	pub fn updatebarpos(&mut self, barheight: i32) {
@@ -42,9 +42,14 @@ impl<'a> Monitor<'a> {
 			self.by = -barheight;
 		}
     }
+
+	pub fn intersect(&self, x: i32, y: i32, w: i32, h: i32) -> i32 {
+        max(0, min(x + w, self.wx + self.ww) - max(x, self.wx))
+        * max(0, min(y + h, self.wy + self.wh) - max(y, self.wy))
+    }
 }
 
-impl Default for Monitor<'_> {
+impl Default for Monitor {
     fn default() -> Self {
         Self { 
 			tagset: [1, 1],

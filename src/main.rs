@@ -1,6 +1,6 @@
 use std::collections::LinkedList;
 
-use rxl::{xconst, Monitor, Settings};
+use rxl::{xconst, Monitor, Settings, Drw};
 use x11::{xlib::{Display, XCloseDisplay, XErrorEvent, XOpenDisplay, XDefaultRootWindow, XSync, SubstructureRedirectMask, BadWindow, BadMatch, BadDrawable, BadAccess, XDefaultScreen, XDisplayWidth, XDisplayHeight, XRootWindow}};
 use libc::{signal, 
     //setsid, fork, close,
@@ -29,24 +29,24 @@ fn check_other_wm(display: *mut Display) -> Result<(), &'static str> {
     Ok(())
 }
 
-fn setup<'a>(display: *mut Display, settings: &'a mut Settings<'a>) -> Result<(), &'static str> {
+fn setup<'a>(settings: &'a mut Settings) -> Result<Drw<'a>, &'static str> {
     // clean up any zombie processes
     sigchld(0);
 
     unsafe {
-        let screen = default_screen(display);
-        let sw = XDisplayWidth(display, screen);
-        let sh = XDisplayHeight(display, screen);
-        let root = XRootWindow(display, screen);
-        let mut drw = rxl::Drw::create(display, settings, screen, root, sw as u32,sh as u32);
+        let screen = default_screen(settings.dpy);
+        let sw = XDisplayWidth(settings.dpy, screen);
+        let sh = XDisplayHeight(settings.dpy, screen);
+        let root = XRootWindow(settings.dpy, screen);
+        let mut drw = rxl::Drw::create(settings.dpy, settings, screen, root, sw as u32,sh as u32);
         if let None = drw.fontset_create(FONTS) {
             return Err("no founts could be loaded")
         }
         let lrpad = drw.fonts.h;
         let bh = drw.fonts.h + 2;
         drw.updategeom();
+        Ok(drw)
     }
-    Ok(())
 }
 
 fn scan() -> Result<(), &'static str> {
@@ -69,12 +69,15 @@ fn cleanup() -> Result<(), &'static str> {
 //static mut RESULT_SENDER: Option<Mutex<Sender<()>>> = None;
 
 fn main() -> Result<(), &'static str> {
+    let display = connect_display()?;
     let mut settings = Settings {
         sw: 0, sh: 0,
         bh: 0,
-        mons: LinkedList::new()
+        mons: LinkedList::new(),
+        dpy: display,
+        root: 0,
+        selmon: 0,
     };
-    let display = connect_display()?;
     // check command args
 
     // handle signals
@@ -82,7 +85,7 @@ fn main() -> Result<(), &'static str> {
     // check other wm
     check_other_wm(display)?;
     // setup
-    setup(display, &mut settings)?;
+    setup(&mut settings)?;
     // scan
     scan()?;
     // run

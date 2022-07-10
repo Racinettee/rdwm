@@ -7,13 +7,7 @@ use x11::{
 
 use super::{xin, ScreenInfoExt, Settings, Monitor};
 
-#[derive(Copy, Clone)]
-pub struct Layout {
-    pub symbol:  &'static str,
-    pub arrange: Option<fn (&mut Monitor)>,
-}
-
-pub struct Client<'a> {
+pub struct Client {
     pub name: [i8; 256],
     pub mina: f32, pub maxa: f32,
     pub x: i32, pub y: i32, pub w: i32, pub h: i32,
@@ -31,10 +25,6 @@ pub struct Client<'a> {
 	pub mon: i32,
 	pub win: Window,
 }
-
-pub static mut SELMON: i32 = 0;
-pub static mut SW: i32 = 0;
-pub static mut SH: i32 = 0;
 
 pub struct Fnt {
     pub dpy: *mut Display,
@@ -65,11 +55,11 @@ pub struct Drw<'a> {
     //pub scheme: *mut Clr,
     pub fonts: Box<Fnt>,
 
-    pub settings: &'a mut Settings<'a>,
+    pub settings: &'a mut Settings,
 }
 
 impl<'a> Drw<'a> {
-    pub fn create(display: *mut Display, settings: &'a mut Settings<'a>, screen: i32, root: Window, w: u32, h: u32) -> Self {
+    pub fn create(display: *mut Display, settings: &'a mut Settings, screen: i32, root: Window, w: u32, h: u32) -> Self {
         let result = Drw {
             dpy: display,
             w, h, root, screen,
@@ -164,20 +154,16 @@ impl<'a> Drw<'a> {
                 for _ in 0..(unique.len() - n) {
                     self.settings.mons.push_back(Monitor::create());
                 }
-                for (i, m) in self.settings.mons.iter_mut().enumerate() {
+                for (i, (m, unique)) in self.settings.mons.iter_mut().zip(unique).enumerate() {
                     if i >= n
-                    || unique[i].x_org as i32 != m.mx || unique[i].y_org as i32 != m.my
-                    || unique[i].width as i32 != m.mw || unique[i].height as i32 != m.mh {
+                    || unique.x_org as i32 != m.mx || unique.y_org as i32 != m.my
+                    || unique.width as i32 != m.mw || unique.height as i32 != m.mh {
                         dirty = true;
                         m.num = i as i32;
-                        m.mx = unique[i].x_org as i32;
-                        m.wx = unique[i].x_org as i32;
-                        m.my = unique[i].y_org as i32;
-                        m.wy = unique[i].y_org as i32;
-                        m.mw = unique[i].width as i32;
-                        m.mh = unique[i].height as i32;
-                        m.ww = unique[i].width as i32;
-                        m.wh = unique[i].height as i32;
+                        (m.mx, m.wx) = (unique.x_org as i32, unique.x_org as i32);
+                        (m.my, m.wy) = (unique.y_org as i32, unique.y_org as i32);
+                        (m.mw, m.ww) = (unique.width as i32, unique.width as i32);
+                        (m.mh, m.wh) = (unique.height as i32, unique.height as i32);
                         m.updatebarpos(self.settings.bh);
                     }
                 }
@@ -192,36 +178,29 @@ impl<'a> Drw<'a> {
                         Self::attach(c);
                         Self::attachstack(c);
                     }
-                    unsafe {
-                        if last_monitor.num == SELMON {
-                            SELMON = first_mon_num;
-                        }
+                    if last_monitor.num == self.settings.selmon {
+                        self.settings.selmon = first_mon_num;
                     }
                     Self::cleanup_mon(last_monitor);
                 }
             }
-            drop(unique);
         } else {
             if self.settings.mons.is_empty() {
                 self.settings.mons.push_back(Monitor::create());
             }
             let first_mon = self.settings.mons.front_mut().unwrap();
-            if unsafe { first_mon.mw != SW || first_mon.mh != SH } {
+            if first_mon.mw != self.settings.sw || first_mon.mh != self.settings.sh {
                 dirty = true;
-                unsafe {
-                    first_mon.mw = SW;
-                    first_mon.ww = SW;
-                    first_mon.mh = SH;
-                    first_mon.wh = SH;
-                }
+                first_mon.mw = self.settings.sw;
+                first_mon.ww = self.settings.sw;
+                first_mon.mh = self.settings.sh;
+                first_mon.wh = self.settings.sh;
                 first_mon.updatebarpos(self.settings.bh);
             }
         }
         if dirty {
-            unsafe {
-                SELMON = self.settings.mons.front().unwrap().num;
-                SELMON = Self::wintomon(self.root).num;
-            }
+            self.settings.selmon = self.settings.mons.front().unwrap().num;
+            self.settings.selmon = self.settings.win_to_mon(self.root).num;
         }
         dirty
     }
@@ -237,9 +216,7 @@ impl<'a> Drw<'a> {
     fn cleanup_mon(_m: &Monitor) {
         todo!()
     }
-    fn wintomon(_w: Window) -> &'a Monitor<'a> {
-        todo!()
-    }
+
 }
 
 pub fn tile(_m: &mut Monitor) {
